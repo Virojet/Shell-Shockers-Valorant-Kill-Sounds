@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shell Shockers Valorant Kill Sounds
-// @version      1.0.0
-// @description  Valorant-style kill sounds: a sound on each of your kills, a step higher for each kill in your streak up to the 5th. Five sound packs, or your own files.
+// @version      1.1.0
+// @description  Valorant-style kill sounds and kill banners: a sound and a banner on each of your kills, a step higher for each kill in your streak up to the 5th. Five sound packs, seven of Valorant's own, or your own files.
 // @namespace    https://github.com/Virojet
 // @author       Virojet
 // @license      MIT
@@ -75,23 +75,29 @@
 
    How it knows: when you crack someone, the game shows its message by calling
    vueApp.shellIngameNotification({ type: 0, streak }), with your streak once it's 2 or more. The script wraps that
-   call: it starts the sound, then lets the game show its message as usual. Only your own kills make that call with
-   type 0, so other players' kills, hits and your deaths make no sound. The game's code isn't changed.
+   call: it starts the sound and the banner, then lets the game show its message as usual. Only your own kills make
+   that call with type 0, so other players' kills, hits and your deaths do nothing. The game's code isn't changed.
 
-   The sounds: five packs made in your browser when the game loads (nothing is downloaded), or your own files,
-   kept in this site's storage. They play through the game's sound output, so its Sound Effects volume turns them
-   up and down with everything else.
+   The sounds: five packs made in your browser when the game loads, seven of Valorant's own kill sounds, downloaded
+   from this project on GitHub the first time you pick one and kept in this site's storage, or your own files, kept
+   there too. They play through the game's sound output, so its Sound Effects volume turns them up and down with
+   everything else.
 
-   Settings ▸ the speaker tab ▸ Kill Sounds has the pack, a Test button (kill 1, 2 … 5, one per press) and a
-   volume. As with the game's settings around it, a change is kept when you press Confirm.
+   The banner: the banner for that kill pops up with its sound, below the crosshair and just above the game's own
+   kill message. It always goes with the sound: a Valorant pack's own banner for that kill, or with the other packs, a
+   cracked egg drawn in the style of Valorant's default one. It glows in its pack's colour, stays as long as its
+   sound rings, and flares again on each swell of a Valorant ace.
 
-   window.ssKillSounds: version, settings(), set({ pack, volume }), play(kill), and render(pack, kill), which
-   returns the AudioBuffer for checking a sound. */
+   Settings ▸ the speaker tab ▸ Kill Sounds has the pack, a Test button (kill 1, 2 … 5, one per press), a volume
+   and the banner's on/off. As with the game's settings around it, a change is kept when you press Confirm.
+
+   window.ssKillSounds: version, settings(), set({ pack, volume, banner }) (banner: true or false), play(kill), and
+   render(pack, kill), which returns the AudioBuffer for checking a sound. */
 (() => {
   "use strict";
   if (window.ssKillSounds) return;   // already running: Tampermonkey and the Mod Menu both started it
 
-  const VERSION = "1.0.0";
+  const VERSION = "1.1.0";
   const STORE = "ssKillSounds";
   const MAX_KILL = 5;
   const PACKS = [
@@ -100,9 +106,20 @@
     { id: "synth", name: "Synth" },
     { id: "blade", name: "Blade" },
     { id: "bubble", name: "Bubble" },
+    // Valorant's own kill sounds and banners, downloaded when picked (see FILES). `glow` is the colour of the pack's
+    // banner, which it glows in.
+    { id: "default", name: "Valorant Default", valorant: true, glow: "#47ffbd" },
+    { id: "reaver", name: "Reaver", valorant: true, glow: "#b856f5" },
+    { id: "prelude", name: "Prelude to Chaos", valorant: true, glow: "#c42bc0" },
+    { id: "primordium", name: "Primordium", valorant: true, glow: "#f78e74" },
+    { id: "sovereign", name: "Sovereign", valorant: true, glow: "#86f7ff" },
+    { id: "kuronami", name: "Kuronami", valorant: true, glow: "#61abd5" },
+    { id: "evori", name: "Evori Dreamwings", valorant: true, glow: "#9b7cff" },
   ];
+  const VALORANT = new Set(PACKS.filter(p => p.valorant).map(p => p.id));
   const CUSTOM = "custom", OFF = "off";
-  const DEFAULTS = Object.freeze({ pack: "classic", volume: 0.8 });
+  const EGG = "egg", EGG_GLOW = "#47f5b4";   // the cracked egg banner, for the other packs and your own sounds
+  const DEFAULTS = Object.freeze({ pack: "classic", volume: 0.8, banner: true });
   const warn = (...a) => console.warn("[Kill Sounds]", ...a);
 
   /* ---- Saved settings ---- */
@@ -112,6 +129,7 @@
     return {
       pack: ok && isPack(s.pack) ? s.pack : DEFAULTS.pack,
       volume: ok && Number.isFinite(s.volume) ? Math.min(1, Math.max(0, s.volume)) : DEFAULTS.volume,
+      banner: !(ok && (s.banner === false || s.banner === OFF)),   // "off": how the first 1.1.0 test saved it
     };
   }
   let saved;
@@ -119,7 +137,7 @@
   function save(s) {
     saved = clean(s);
     try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch { /* storage blocked: kept for this visit */ }
-    if (running && saved.pack !== OFF) clips(saved.pack).catch(warn);
+    if (running) getReady();
   }
 
   /* ---- The packs, made with the Web Audio API ----
@@ -349,10 +367,11 @@
   };
 
   /* ---- Levels ----
-     Every clip, yours included, is matched to the same loudness, so no pack or kill is louder than another. Its
-     peaks are held to 12 dB over that: a peak that stands out further is turned down for a moment, rather than the
-     whole clip. That takes a few dB at most off the click or strike a sound starts with. Silence before your own
-     sound starts is cut, so it plays the moment you get the kill. */
+     Every clip, yours included, is matched to the same loudness, so no pack or kill is louder than another (a
+     Valorant pack keeps Valorant's own balance between its kills: see loadValorant). Its peaks are held to 12 dB
+     over that: a peak that stands out further is turned down for a moment, rather than the whole clip. That takes a
+     few dB at most off the click or strike a sound starts with. Silence before your own sound starts is cut, so it
+     plays the moment you get the kill. */
   const TARGET = 0.237;   // the loudness (see rms): -12.5 dBFS
   const CREST = 3.98;     // peaks stay under 12 dB over that, -0.5 dBFS
 
@@ -421,7 +440,8 @@
     return env;
   }
 
-  function master(buf, { trimStart = false, maxSeconds = 6 } = {}) {
+  // With `gain`, the clip gets that gain as it is (its loudness is left alone), and only its peaks are held.
+  function master(buf, { trimStart = false, maxSeconds = 6, gain: fixed = 0 } = {}) {
     const sr = buf.sampleRate, n = buf.length, chans = [];
     for (let ch = 0; ch < buf.numberOfChannels; ch++) chans.push(buf.getChannelData(ch));
     let peak = 0;
@@ -443,7 +463,7 @@
     const ys = chans.map((x, ch) => out.getChannelData(ch));
     const fadeIn = from ? Math.round(0.002 * sr) : 0, fadeOut = Math.min(len >> 1, Math.round((capped ? 0.06 : 0.01) * sr));
     const target = TARGET, ceiling = TARGET * CREST;
-    let gain = Math.min(100, target / rms(chans, from, to, sr));
+    let gain = fixed || Math.min(100, target / rms(chans, from, to, sr));
     // Limiting takes some loudness off with it, so the gain goes up again until the loudness is right.
     for (let pass = 0; ; pass++) {
       const env = limiter(chans, from, len, gain, ceiling, sr);
@@ -456,7 +476,7 @@
           y[i] = x[from + i] * g;
         }
       });
-      if (pass === 3) break;
+      if (pass === 3 || fixed) break;
       const now = rms(ys, 0, len, sr);
       if (Math.abs(now / target - 1) < 0.03) break;
       gain = Math.min(100, gain * target / now);
@@ -465,10 +485,52 @@
   }
 
   async function renderKill(pack, kill) {
+    if (VALORANT.has(pack)) return (await loadValorant(pack))[kill - 1];
     if (!BUILD[pack]) throw new Error("No pack called " + pack);
     const buf = master(await BUILD[pack](kill).c.startRendering());
     if (!buf) throw new Error(`${pack} ${kill} came out silent`);
     return buf;
+  }
+
+  /* ---- Valorant's own kill sounds and banners ----
+     Five MP3s and five PNGs a pack, about 1 MB, in this project's valorant folder on GitHub. They come from the
+     commit that added them, so the files this version uses never change under it. A pack is downloaded the first
+     time it's needed, then kept in this site's Cache Storage, so it doesn't download again on the next visit. */
+  const FILES = "https://raw.githubusercontent.com/Virojet/Shell-Shockers-Valorant-Kill-Sounds/7b76c8652121d1ecf80d576139ee2959d41bde36/valorant";
+  const KEEP = "ss-kill-sounds";
+  let kept = null;
+  function keep() {
+    kept = kept || (async () => {
+      const store = await caches.open(KEEP);
+      for (const req of await store.keys()) if (!req.url.startsWith(FILES + "/")) store.delete(req);   // an older version's
+      return store;
+    })().catch(() => null);   // no storage here (a private window, or it's blocked): they download on each visit
+    return kept;
+  }
+  async function download(pack, kill, type) {
+    const url = `${FILES}/${pack}/${kill}.${type}`, store = await keep();
+    const old = store && await store.match(url).catch(() => null);
+    if (old) return old;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Couldn't download ${pack} ${kill}.${type} (HTTP ${res.status})`);
+    if (store) store.put(url, res.clone()).catch(() => { /* storage full: it downloads again next time */ });
+    return res;
+  }
+  // One gain for the whole pack brings its kills 1 to 4 to the other packs' loudness on average (in Valorant, a
+  // streak gets a little louder as it climbs), so its ace stays as much bigger as Valorant made it. An ace rings
+  // for up to 10 s.
+  async function loadValorant(pack) {
+    const c = new OfflineAudioContext(2, 1, SR);
+    const bufs = await Promise.all(Array.from({ length: MAX_KILL }, async (_, i) =>
+      c.decodeAudioData(await (await download(pack, i + 1, "mp3")).arrayBuffer())));
+    const chans = b => Array.from({ length: b.numberOfChannels }, (_, ch) => b.getChannelData(ch));
+    const logs = bufs.slice(0, -1).map(b => Math.log(rms(chans(b), 0, b.length, b.sampleRate)));
+    const gain = TARGET / Math.exp(logs.reduce((a, b) => a + b) / logs.length);
+    return bufs.map((b, i) => {
+      const out = master(b, { gain, maxSeconds: 12 });
+      if (!out) throw new Error(`${pack} ${i + 1} came out silent`);
+      return out;
+    });
   }
 
   /* ---- Your own sounds: up to 5 files in this site's IndexedDB ---- */
@@ -512,7 +574,7 @@
   function clips(pack) {
     let p = cache.get(pack);
     if (p) return p;
-    p = pack === CUSTOM ? readFiles().then(decodeAll) : (async () => {
+    p = pack === CUSTOM ? readFiles().then(decodeAll) : VALORANT.has(pack) ? loadValorant(pack) : (async () => {
       const list = [];
       for (let k = 1; k <= MAX_KILL; k++) list.push(await renderKill(pack, k));
       return list;
@@ -529,11 +591,13 @@
      Into the game's own sound output (BAWK, the game's audio engine), so its Sound Effects volume applies to the
      kill sounds too. They join it after its compressor, which holds everything that goes through it at about the
      same level and would leave the Kill Sounds volume almost nothing to do. If the game's output isn't there, a
-     sound output of its own. */
+     sound output of its own. A long sound (a Valorant ace rings for up to 10 s) fades out as the next kill's sound
+     starts, so kills past the 5th don't pile aces up. */
   const OUT = 1.1;           // at 80% and the game's default Sound Effects volume, a kill peaks just under a gunshot
   const MAX_PEAK = 0.89;     // -1 dBFS: with both volumes near full, a kill stops getting louder there instead of clipping
   const GAP = 0.12;          // kills that land together (one grenade) still sound one after the other
   const MAX_VOICES = 4;
+  const LONG = 4;            // seconds: a sound this long gives way to the next one
   const voices = new Set();
   let own = null, lastAt = 0, lastCtx = null;
   function output() {
@@ -547,9 +611,10 @@
     }
     return own;
   }
+  // Returns how long until the sound starts (see GAP), so its banner can pop up with it.
   function play(buf, volume) {
     const out = buf && volume > 0 && output();
-    if (!out) return;
+    if (!out) return 0;
     const { ctx, node } = out;
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
     const src = ctx.createBufferSource(), g = ctx.createGain(), now = ctx.currentTime;
@@ -559,29 +624,180 @@
     const at = lastCtx === ctx ? Math.min(Math.max(now, lastAt + GAP), now + 0.5) : now;
     src.start(at);
     lastAt = at; lastCtx = ctx;
-    const v = { src, g, ctx };
+    for (const old of voices) if (old.long) fade(old, at, 0.06);
+    const v = { src, g, ctx, long: buf.duration > LONG };
     voices.add(v);
     src.onended = () => { voices.delete(v); try { g.disconnect(); } catch { /* already gone */ } };
     if (voices.size > MAX_VOICES) fade(voices.values().next().value);
+    return at - now;
   }
-  function fade(v) {
+  // Down to silence from `at` (or now), over about 7 × `time` seconds.
+  function fade(v, at = 0, time = 0.008) {
     voices.delete(v);
     try {
-      const now = v.ctx.currentTime;
-      v.g.gain.cancelScheduledValues(now);
-      v.g.gain.setTargetAtTime(0, now, 0.008);
-      v.src.stop(now + 0.05);
+      const t = Math.max(at, v.ctx.currentTime);
+      v.g.gain.cancelScheduledValues(t);
+      v.g.gain.setTargetAtTime(0, t, time);
+      v.src.stop(t + 7 * time);
     } catch { /* already stopped */ }
   }
-  const quiet = () => voices.forEach(fade);
+  const quiet = () => [...voices].forEach(v => fade(v));
 
+  /* ---- The kill banner ----
+     It pops up below the crosshair as its kill's sound starts, the way Valorant's does: in fast, a little big and
+     bright, then it settles with a glow in its pack's colour, stays while the sound rings and fades.
+     It sits between the crosshair and the game's own kill message, which starts 67% of the way down the screen (63%
+     with a Shell Streak). Like the game's UI, it's sized by the screen's height, so it keeps that place on any
+     screen. It never takes a click. */
+  const BANNER = "ss-kill-banner";
+  // The banner a kill shows goes with its sound: a Valorant pack's own, or the egg with the other packs and your
+  // own sounds. Sounds off, the egg still shows.
+  const bannerFor = s => !s.banner ? null : VALORANT.has(s.pack) ? s.pack : EGG;
+  const arts = new Map();   // banner → Promise of its 5 pictures, decoded and ready to show
+  function art(look) {
+    let p = arts.get(look);
+    if (p) return p;
+    p = Promise.all(Array.from({ length: MAX_KILL }, async (_, i) => {
+      const img = new Image();
+      img.alt = "";
+      img.draggable = false;
+      img.style.cssText = "display: block; width: 100%; height: 100%;";
+      img.src = look === EGG ? egg(i + 1) : URL.createObjectURL(await (await download(look, i + 1, "png")).blob());
+      await img.decode();
+      return img;
+    }));
+    arts.set(look, p);
+    p.catch(() => { if (arts.get(look) === p) arts.delete(look); });
+    return p;
+  }
+  // Shell Shockers' own banner, drawn in the style of Valorant's default one: a cracked egg in a ring in place of
+  // its skull, and around it a glowing mark for each kill in the streak (two sit left and right, more start at the
+  // top, as in Valorant's).
+  function egg(kill) {
+    const at = (r, a) => `${(150 + r * Math.cos(a)).toFixed(1)} ${(150 + r * Math.sin(a)).toFixed(1)}`;
+    const arc = (r, a, b) => `M${at(r, a)}A${r} ${r} 0 0 1 ${at(r, b)}`;
+    const turn = kill === 2 ? 0 : -Math.PI / 2;
+    const marks = Array.from({ length: kill }, (_, i) => arc(76, turn + i * 2 * Math.PI / kill - 0.3, turn + i * 2 * Math.PI / kill + 0.3)).join("");
+    const lines = arc(91, -2.2, -0.94) + arc(91, 0.94, 2.2) + "M150 42V54M150 246V258M46 141l9 9-9 9M55 141l9 9-9 9M254 141l-9 9 9 9M245 141l-9 9 9 9";
+    const shell = "M150 106C169 106 183 138 183 160C183 181 168 194 150 194C132 194 117 181 117 160C117 138 131 106 150 106Z";
+    const eyes = "M127 156L146 163L144 171L130 169ZM173 156L154 163L156 171L170 169Z", glint = "M131 159L144 164L143 168L132 167ZM169 159L156 164L157 168L168 167Z";
+    return "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">` +
+      `<defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/>` +
+      `<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
+      `<clipPath id="left"><rect width="150" height="300"/></clipPath></defs>` +
+      `<path d="${lines}" fill="none" stroke="#dfe6ea" stroke-opacity=".6" stroke-width="1.6"/>` +
+      `<circle cx="150" cy="150" r="58" fill="#a9bac2" fill-opacity=".14"/>` +
+      `<circle cx="150" cy="150" r="60" fill="none" stroke="#f4f4f4" stroke-width="5"/>` +
+      `<path d="${marks}" fill="none" stroke="#47f5b4" stroke-width="9" stroke-linecap="round" filter="url(#glow)"/>` +
+      `<path d="${shell}" fill="#d3d3d3"/><path d="${shell}" fill="#efefef" clip-path="url(#left)"/>` +
+      `<path d="M120 146L130 139L139 147L149 136L158 147L168 138L180 144" fill="none" stroke="#8e8e8e" stroke-width="3"/>` +
+      `<path d="${eyes}" fill="#5d6866" stroke="#5d6866" stroke-width="3" stroke-linejoin="round"/>` +
+      `<path d="${glint}" fill="#7ff8d4" filter="url(#glow)"/></svg>`);
+  }
+  /* How a banner moves with its sound. It stays as long as the sound rings (until it's 20 dB down from its
+     loudest), 2.2 s at least and 4.6 s at most, so a Valorant ace keeps its banner up while it rings. Each later
+     swell that comes back within 4 dB of the loudest makes it flare again: Valorant's aces swell one to three times
+     in their first 1.6 s. Their kills 1 to 4, like the other packs' sounds, are one hit, so the banner pops once. */
+  const shapes = new WeakMap();   // sound → { ring, swells }, in seconds
+  function shape(buf) {
+    let s = shapes.get(buf);
+    if (s) return s;
+    const F = 0.02, W = Math.round(buf.sampleRate * F), chans = [], env = [];
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) chans.push(buf.getChannelData(ch));
+    for (let i = 0; i + W <= buf.length; i += W) {
+      let sum = 0;
+      for (const x of chans) for (let j = i; j < i + W; j++) sum += x[j] * x[j];
+      env.push(Math.sqrt(sum / (W * chans.length)));
+    }
+    const peak = Math.max(0, ...env);
+    let end = env.length;
+    while (end > 0 && env[end - 1] < peak * 0.1) end--;
+    s = { ring: end * F, swells: [] };
+    let low = Infinity, last = 0;   // the quietest it's been since the last hit, and when that hit was
+    for (let i = 1; i < end - 1 && i * F <= 3; i++) {
+      const t = i * F;
+      low = Math.min(low, env[i]);
+      // A peak back within 4 dB of the loudest, 3 dB or more over the dip before it, 0.4 s or more after the last.
+      if (env[i] >= peak * 0.63 && env[i] >= env[i - 1] && env[i] > env[i + 1] && env[i] > low * 1.41 && t - last >= 0.4) {
+        s.swells.push(t);
+        last = t;
+        low = env[i];
+      }
+    }
+    shapes.set(buf, s);
+    return s;
+  }
+  // A kill's banner, fit to its sound (`buf`, or none: a plain pop). The ace comes in bigger.
+  function fitFor(look, buf, kill) {
+    const { ring, swells } = buf ? shape(buf) : { ring: 0, swells: [] };
+    const time = Math.min(4.6, Math.max(2.2, ring + 0.9));
+    return { time, swells: swells.filter(t => t >= 0.35 && t <= time - 0.85), ace: kill >= MAX_KILL,
+      glow: (PACKS.find(p => p.id === look) || {}).glow || EGG_GLOW };
+  }
+  // Its two animations: the box moves (in, settle, a kick on each swell, fade) and the picture glows (a flash, then
+  // its pack's colour, flaring on each swell). Times are in seconds.
+  function frames({ time, swells, glow, ace }) {
+    const at = t => Math.min(1, Math.max(0, t / time));
+    const halo = (bright, blur, alpha) => `brightness(${bright}) drop-shadow(0 0 ${blur}vh ${glow}${alpha})`;
+    const calm = halo(1, 0.6, "59");
+    const box = [
+      { offset: 0, opacity: 0, transform: `scale(${ace ? 1.75 : 1.5})`, easing: "cubic-bezier(.2, .8, .3, 1)" },
+      { offset: at(0.13), opacity: 1, transform: "scale(.95)" },
+      { offset: at(0.31), opacity: 1, transform: "scale(1)" },
+    ];
+    const pic = [
+      { offset: 0, filter: halo(ace ? 3 : 2.5, ace ? 2.8 : 2.2, "ff") },
+      { offset: at(0.13), filter: halo(1.8, 1.6, "cc") },
+      { offset: at(0.31), filter: calm },
+    ];
+    for (const t of swells) {
+      box.push({ offset: at(t), transform: "scale(1)", easing: "cubic-bezier(.2, .8, .3, 1)" },
+        { offset: at(t + 0.08), transform: "scale(1.06)" }, { offset: at(t + 0.34), transform: "scale(1)" });
+      pic.push({ offset: at(t), filter: calm }, { offset: at(t + 0.06), filter: halo(1.6, 1.8, "e6") },
+        { offset: at(t + 0.4), filter: calm });
+    }
+    box.push({ offset: at(time - 0.48), opacity: 1, transform: "scale(1)", easing: "ease-in" },
+      { offset: 1, opacity: 0, transform: "scale(.96)" });
+    pic.push({ offset: 1, filter: calm });
+    return { box, pic };
+  }
+  let bannerGen = 0;
+  function showBanner(img, delay, fit) {
+    const gen = bannerGen;
+    setTimeout(() => {
+      if (gen !== bannerGen || !running || !document.body) return;
+      let box = document.getElementById(BANNER);
+      if (!box) {
+        box = el("div");
+        box.id = BANNER;
+        box.style.cssText = "position: fixed; left: 50%; top: 52vh; width: 16vh; height: 16vh; margin-left: -8vh; " +
+          "pointer-events: none; z-index: 2147483000; opacity: 0;";
+        document.body.append(box);
+      }
+      box.replaceChildren(img);
+      box.getAnimations({ subtree: true }).forEach(a => a.cancel());   // the last banner's, and this picture's from before
+      const { box: moves, pic } = frames(fit), timing = { duration: fit.time * 1000 };
+      box.animate(moves, timing);
+      img.animate(pic, timing);
+    }, Math.max(0, delay * 1000));
+  }
+  function hideBanner() {
+    bannerGen++;
+    document.getElementById(BANNER)?.remove();
+  }
+
+  // A kill: its sound, and its banner, which pops up as the sound starts. Either one can be off, or fail alone.
   let warned = false;
+  const failed = err => { if (!warned) { warned = true; warn("Couldn't get the kill's sound or banner ready:", err); } return null; };
   function onKill(streak) {
-    const kill = Math.min(MAX_KILL, Math.max(1, Math.floor(streak) || 1)), { pack } = saved;
-    if (pack === OFF || !(saved.volume > 0)) return;
-    clips(pack).then(list => {
-      if (running && saved.pack === pack) play(clipFor(list, kill), saved.volume);
-    }, err => { if (!warned) { warned = true; warn("Couldn't make the sound:", err); } });
+    const kill = Math.min(MAX_KILL, Math.max(1, Math.floor(streak) || 1)), { pack, volume } = saved, look = bannerFor(saved);
+    const sound = pack !== OFF && volume > 0 ? clips(pack).then(list => clipFor(list, kill), failed) : null;
+    const banner = look ? art(look).then(list => list[kill - 1], failed) : null;
+    Promise.all([sound, banner]).then(([buf, img]) => {
+      if (!running) return;
+      const delay = buf && saved.pack === pack ? play(buf, saved.volume) : 0;
+      if (img && bannerFor(saved) === look) showBanner(img, delay, fitFor(look, buf, kill));
+    });
   }
 
   /* ---- The kill hook ---- */
@@ -648,12 +864,26 @@
     if (ui) removeUI();
     const cell = el("div", "f_col");
     cell.id = CELL;
+    const group = (label, list) => {
+      const g = el("optgroup");
+      g.label = label;
+      for (const p of list) g.append(new Option(p.name, p.id));
+      return g;
+    };
     const select = el("select", "ss_select ss_marginright_sm");
-    for (const p of PACKS) select.append(new Option(p.name, p.id));
-    select.append(new Option("Your own sounds", CUSTOM), new Option("Off", OFF));
+    select.append(group("Sound packs", PACKS.filter(p => !p.valorant)), group("Valorant", PACKS.filter(p => p.valorant)),
+      new Option("Your own sounds", CUSTOM), new Option("Off", OFF));
     const test = el("button", "ss_button btn_blue bevel_blue btn_sm", "Test");
     test.type = "button";
-    test.title = "Plays kill 1, then 2, and so on up to 5.";
+    test.title = "Plays kill 1, then 2, and so on up to 5, with its banner.";
+    // The game's own checkbox, as in its other settings tabs.
+    const banner = el("input");
+    banner.type = "checkbox";
+    const bannerLabel = el("label", "ss_checkbox label", "Kill Banner ");
+    bannerLabel.title = "A banner for each kill pops up with its sound: the Valorant pack's own, or a cracked egg with the other packs.";
+    bannerLabel.append(banner, el("span", "checkmark"));
+    const bannerRow = el("div", "nowrap");
+    bannerRow.append(bannerLabel);
     const range = el("input", "ss_slider");
     Object.assign(range, { type: "range", min: "0", max: "1", step: "0.01" });
     const value = el("label", "ss_slider label text_blue4");
@@ -666,7 +896,7 @@
     Object.assign(input, { type: "file", accept: "audio/*,.mp3,.ogg,.wav,.m4a,.webm", multiple: true, hidden: true });
     const row = (...kids) => { const r = el("div", "f_row"); r.append(...kids); return r; };
     files.append(choose, note, input);
-    cell.append(el("h3", "margin-bottom-none h-short", "Kill Sounds"), row(select, test), row(range, value), files);
+    cell.append(el("h3", "margin-bottom-none h-short", "Kill Sounds"), row(select, test), row(range, value), files, bannerRow);
     grid.append(cell);
 
     let style = document.getElementById(CELL + "-style");
@@ -689,12 +919,17 @@
     });
     range.addEventListener("change", () => preview(testKill || 1));
     test.addEventListener("click", () => preview(testKill = testKill % MAX_KILL + 1));
+    banner.addEventListener("change", () => {
+      pending.banner = banner.checked;
+      refresh();
+      if (pending.banner) preview(testKill || 1);
+    });
     choose.addEventListener("click", () => input.click());
     input.addEventListener("change", () => { const f = [...input.files]; input.value = ""; addFiles(f); });
 
     // The popup opening or closing puts the saved settings back in the controls, so a change only stays if
     // Confirm saved it (Cancel, the X and Esc all leave things as they were).
-    const me = { cell, select, test, range, value, files, note, input, io: null, shown: null };
+    const me = { cell, select, test, range, value, files, choose, note, input, banner, io: null, shown: null };
     me.io = new IntersectionObserver(entries => {
       const shown = entries[entries.length - 1].isIntersecting;
       if (ui !== me || shown === me.shown) return;
@@ -726,11 +961,13 @@
     if (!ui) return;
     const p = pending || saved, off = p.pack === OFF;
     ui.select.value = p.pack;
+    ui.banner.checked = p.banner;
     ui.range.value = String(p.volume);
     ui.value.textContent = String(Math.round(p.volume * 100));
-    ui.test.disabled = off;
+    ui.test.disabled = off && !p.banner;
     ui.range.disabled = off;
     ui.files.style.display = p.pack === CUSTOM ? "" : "none";
+    ui.choose.style.display = "";
     setNote();
   }
   // With no text, the note names your files. A problem shows in red in a few words, with more in its tooltip.
@@ -741,15 +978,40 @@
     ui.note.title = text ? title : list.map((name, i) => `Kill ${i + 1}${i === n - 1 && n < MAX_KILL ? "+" : ""}: ${name}`).join("\n");
     ui.note.classList.toggle("ssks-error", !!error);
   }
+  // Under the volume, in the row your files use: a Valorant pack that takes a moment says it's downloading, and
+  // says so if it couldn't. No text hides the row.
+  function showStatus(text, error = false, title = text) {
+    if (!ui || (pending || saved).pack === CUSTOM) return;   // the row is your files' then
+    ui.files.style.display = text ? "" : "none";
+    ui.choose.style.display = "none";
+    if (text) setNote(text, error, title);
+  }
+  // Kill `kill`'s sound and banner, as they'd come in a game.
   function preview(kill) {
-    const { pack, volume } = pending || saved;
-    if (pack === OFF) return;
-    (pack === CUSTOM && pendingFiles ? Promise.resolve(pendingFiles.decoded) : clips(pack)).then(list => {
-      if (!list.length) return setNote("Choose files first", true, "Choose 1 to 5 sound files first.");
-      play(clipFor(list, kill), volume);
-    }, err => {
-      warn(err);
-      if (pack === CUSTOM) setNote("Can't play your files", true, "Can't play your saved files. Choose them again.");
+    const s = pending || saved, { pack, volume } = s, look = bannerFor(s);
+    let lost = false;   // a Valorant pack's sounds or banners couldn't be downloaded
+    const sound = pack !== OFF ?
+      (pack === CUSTOM && pendingFiles ? Promise.resolve(pendingFiles.decoded) : clips(pack)).then(list => {
+        if (list.length) return clipFor(list, kill);
+        setNote("Choose files first", true, "Choose 1 to 5 sound files first.");
+        return null;
+      }, err => {
+        warn(err);
+        if (pack === CUSTOM) setNote("Can't play your files", true, "Can't play your saved files. Choose them again.");
+        else lost = true;
+        return null;
+      }) : null;
+    const banner = look ? art(look).then(list => list[kill - 1], err => { warn(err); lost = true; return null; }) : null;
+    const remote = VALORANT.has(pack);
+    const slow = remote && setTimeout(() => showStatus("Downloading…"), 150);
+    Promise.all([sound, banner]).then(([buf, img]) => {
+      clearTimeout(slow);
+      if (remote && (pending || saved).pack === pack) {
+        const name = PACKS.find(p => p.id === pack).name;
+        showStatus(lost ? "Couldn't download " + name : "", true, `Couldn't download ${name} from GitHub. Check your connection, then try again.`);
+      }
+      const delay = buf ? play(buf, volume) : 0;
+      if (img) showBanner(img, delay, fitFor(look, buf, kill));
     });
   }
   // Picked files wait for Confirm like the rest of the settings: until then they're only previewed.
@@ -819,8 +1081,7 @@
     document.addEventListener("click", onClick, true);
     tick();
     timer = setInterval(tick, 1000);
-    // The saved pack is made ahead of the first kill.
-    setTimeout(() => { if (running && saved.pack !== OFF) clips(saved.pack).catch(warn); }, 1500);
+    setTimeout(() => { if (running) getReady(); }, 1500);
     readNames().then(n => { customNames = n; setNote(); }, () => { /* no storage: no files */ });
   }
   function stop() {
@@ -831,6 +1092,13 @@
     unhook();
     removeUI();
     quiet();
+    hideBanner();
+  }
+  // The saved pack and banner are made, or downloaded, ahead of the first kill.
+  function getReady() {
+    if (saved.pack !== OFF) clips(saved.pack).catch(warn);
+    const look = bannerFor(saved);
+    if (look) art(look).catch(warn);
   }
 
   window.ssKillSounds = {
@@ -838,19 +1106,17 @@
     packs: [...PACKS.map(p => p.id), CUSTOM, OFF],
     settings: () => ({ ...saved }),
     set(s) { save({ ...saved, ...s }); revert({ ...saved }); return { ...saved }; },
-    play(kill = 1) {
-      const { pack, volume } = saved, k = Math.min(MAX_KILL, Math.max(1, kill | 0));
-      if (pack !== OFF) clips(pack).then(list => play(clipFor(list, k), volume), warn);
-    },
+    play: (kill = 1) => onKill(kill),   // as if you'd got kill `kill` in your streak: its sound and banner
     render: (pack, kill) => renderKill(pack, Math.min(MAX_KILL, Math.max(1, kill | 0))),
-    status: () => ({ running, hooked: !!hooked, settingsShown: !!ui && ui.cell.isConnected, packsInMemory: [...cache.keys()] }),
+    status: () => ({ running, hooked: !!hooked, settingsShown: !!ui && ui.cell.isConnected, packsInMemory: [...cache.keys()],
+      bannersInMemory: [...arts.keys()] }),
   };
 
   start();
   // The Mod Menu (if it's installed) lists it with an on/off switch and a shortcut to these settings.
   (window.ssModMenuQueue = window.ssModMenuQueue || []).push({
     id: "valorant-kill-sounds", name: "Valorant Kill Sounds", version: VERSION, group: "mod",
-    description: "A Valorant-style sound on each of your kills, a step higher for each kill in your streak.",
+    description: "A Valorant-style sound and banner on each of your kills, a step higher for each kill in your streak.",
     enable: start, disable: stop, openSettings,
   });
 })();
