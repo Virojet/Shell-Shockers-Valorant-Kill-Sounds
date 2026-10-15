@@ -8,7 +8,7 @@
 
 [![Install Valorant Kill Sounds](https://img.shields.io/badge/Install_Valorant_Kill_Sounds-one_click-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Valorant-Kill-Sounds/main/Shell-Shockers-Valorant-Kill-Sounds.user.js)
 
-[![Version](https://img.shields.io/badge/version-1.2.0-0E7697?style=flat-square)](./Shell-Shockers-Valorant-Kill-Sounds.user.js)
+[![Version](https://img.shields.io/badge/version-1.2.1-0E7697?style=flat-square)](./Shell-Shockers-Valorant-Kill-Sounds.user.js)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](./LICENSE)
 
 </div>
@@ -40,7 +40,7 @@ Each time you crack someone, you hear a sound and a kill banner pops up, and eac
   | **Valorant** | **Default**, **Reaver**, **Prelude to Chaos**, **Primordium**, **Sovereign**, **Kuronami**, **Evori Dreamwings**, **Champions 2021**, **Gaia's Vengeance**, **Recon**, **Blackthorn**, **CYRAX**, **Singularity**, **Prime//2.0** and **Sentinels of Light**: Valorant's own kill sounds and kill banners for each kill in the streak, ace included. |
 
 - **The kill banner** pops up with each kill's sound, below your crosshair and just above the game's own kill message, with a mark for each kill in your streak. It always goes with the sound: with Primordium, your 1st kill plays Primordium's 1st kill sound with Primordium's 1st kill banner, and so on up to the ace. With the other packs and your own sounds, you get **the Shell Shockers banner**: a cracked egg drawn in the style of Valorant's default banner.
-- **Each banner moves with its sound.** It glows in its pack's colour and stays up as long as its sound rings. A Valorant ace keeps its banner up for up to 4.6 seconds, and it flares again on each swell of the ace.
+- **Each banner moves with its sound.** It pops up the moment you hear the sound, then kicks and flares on each later hit in it, so a Valorant ace's banner beats with the ace. It glows in its pack's colour and stays up as long as its sound rings, up to 4.6 seconds for an ace.
 - **A Valorant ace rings out** for up to 10 seconds, as in Valorant. If you get another kill before it's done, it fades out as the new kill's sound starts.
 - **Only your own kills.** Other players' kills, your hits and your deaths do nothing. It plays when the game shows you its own kill message, so it tells you nothing the game doesn't.
 - **Every pack is equally loud**, just under a gunshot. The Valorant packs keep Valorant's own mix: their kills 1 to 4 are as loud as the other packs' on average, and their ace is bigger, as in the game.
@@ -56,7 +56,7 @@ Each time you crack someone, you hear a sound and a kill banner pops up, and eac
 
 Open **Settings** ▸ the **speaker tab** ▸ **Kill Sounds**, next to Language:
 
-- **The list:** a sound pack, a Valorant pack, **Your own sounds** or **Off**.
+- **The list:** a sound pack, a Valorant pack, **Your own sounds** or **Off**. It takes your theme's colours, and in Chrome and Edge it opens as a short list that scrolls.
 - **Test** plays kill 1, then 2, and so on up to 5, one per press, each with its banner.
 - **The slider** is the kill sounds' own volume.
 - **Kill Banner** turns the banner on or off. It's on to start with.
@@ -81,6 +81,36 @@ Pick **Off** under Kill Sounds, untick **Kill Banner**, then press **Confirm**. 
 > Shell Shockers Valorant Kill Sounds was created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.
 >
 > Valorant and the names of its skins are trademarks of Riot Games. The sounds and banners in the [valorant](./valorant) folder belong to Riot Games and aren't covered by this project's MIT license. The five sound packs and the Shell Shockers banner are original: the script makes them in your browser.
+
+## Changelog
+
+#### v1.2.1 — current
+
+- **Banners on the beat:** a kill banner now kicks and flares on each hit in its sound, so a Valorant ace's banner beats along with the ace. It used to kick only on the ace's loudest swells, which often fell between the hits. Kills 1 to 4 that hit more than once (Recon, Singularity, CYRAX and a few others) kick on those hits too.
+- **In time with what you hear:** the banner pops up the moment you hear its sound. It used to show up a moment early, because your browser and speakers take a little time to play a sound (longer on Bluetooth).
+- **Kill Sounds list:** it takes your theme's colours. With themes like Blossom, its group headings were white bars. In Chrome and Edge it opens as a short list that scrolls instead of filling the screen, with one lit row that follows the mouse and the arrow keys.
+
+No Valorant files changed, so nothing downloads again.
+
+<details>
+<summary><b>v1.2.0 and older</b></summary>
+
+#### v1.2.0
+
+- **Eight more Valorant packs,** fifteen in all: Champions 2021, Gaia's Vengeance (blue), Recon, Blackthorn, CYRAX, Singularity, Prime//2.0 and Sentinels of Light, each with Valorant's own sound and kill banner for kills 1 to 5. Their banners glow in the colour of their kill marks.
+- Your Valorant pack downloads once more (about 1 MB).
+
+#### v1.1.0
+
+- **Seven Valorant packs:** Default, Reaver, Prelude to Chaos, Primordium, Sovereign, Kuronami and Evori Dreamwings, each with Valorant's own sound and kill banner for kills 1 to 5. A pack downloads once (about 1 MB) the first time you pick it, then stays in your browser.
+- **Kill banners:** every kill gets a banner that goes with its sound: the Valorant pack's own, or a cracked egg with the other packs and your own sounds. It glows in the pack's colour and stays up as long as its sound rings.
+- **Kill Banner** in Settings turns the banners on or off.
+
+#### v1.0.0
+
+- A sound on each of your kills that climbs with your streak: five packs made in your browser (Classic, Crystal, Synth, Blade and Bubble) or your own sound files, picked in **Settings ▸ speaker tab ▸ Kill Sounds**.
+
+</details>
 
 ## License
 

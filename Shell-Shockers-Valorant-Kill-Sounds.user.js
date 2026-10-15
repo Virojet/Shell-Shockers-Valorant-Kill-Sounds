@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shell Shockers Valorant Kill Sounds
-// @version      1.2.0
+// @version      1.2.1
 // @description  Valorant-style kill sounds and kill banners: a sound and a banner on each of your kills, a step higher for each kill in your streak up to the 5th. Five sound packs, fifteen of Valorant's own, or your own files.
 // @namespace    https://github.com/Virojet
 // @author       Virojet
@@ -86,7 +86,7 @@
    The banner: the banner for that kill pops up with its sound, below the crosshair and just above the game's own
    kill message. It always goes with the sound: a Valorant pack's own banner for that kill, or with the other packs, a
    cracked egg drawn in the style of Valorant's default one. It glows in its pack's colour, stays as long as its
-   sound rings, and flares again on each swell of a Valorant ace.
+   sound rings, and kicks on each later hit in the sound, so a Valorant ace's banner beats with the ace.
 
    Settings ▸ the speaker tab ▸ Kill Sounds has the pack, a Test button (kill 1, 2 … 5, one per press), a volume
    and the banner's on/off. As with the game's settings around it, a change is kept when you press Confirm.
@@ -97,7 +97,7 @@
   "use strict";
   if (window.ssKillSounds) return;   // already running: Tampermonkey and the Mod Menu both started it
 
-  const VERSION = "1.2.0";
+  const VERSION = "1.2.1";
   const STORE = "ssKillSounds";
   const MAX_KILL = 5;
   const PACKS = [
@@ -588,7 +588,7 @@
       return list;
     })();
     cache.set(pack, p);
-    p.catch(() => { if (cache.get(pack) === p) cache.delete(pack); });
+    p.then(warm, () => { if (cache.get(pack) === p) cache.delete(pack); });
     // Only the saved pack and the last one tried stay in memory.
     for (const k of [...cache.keys()]) if (cache.size > 2 && k !== pack && k !== saved.pack) cache.delete(k);
     return p;
@@ -619,7 +619,8 @@
     }
     return own;
   }
-  // Returns how long until the sound starts (see GAP), so its banner can pop up with it.
+  // Returns how long until the sound is heard, so its banner can pop up with it: it may wait for the last kill's
+  // (see GAP), and the browser and the speakers take a moment to play it (about 0.05 s, longer on Bluetooth).
   function play(buf, volume) {
     const out = buf && volume > 0 && output();
     if (!out) return 0;
@@ -637,7 +638,17 @@
     voices.add(v);
     src.onended = () => { voices.delete(v); try { g.disconnect(); } catch { /* already gone */ } };
     if (voices.size > MAX_VOICES) fade(voices.values().next().value);
-    return at - now;
+    return untilHeard(ctx, at);
+  }
+  // Seconds from now until a sound that starts at `at` on ctx's clock comes out of the speakers.
+  function untilHeard(ctx, at) {
+    const wait = at - ctx.currentTime;
+    try {
+      const { contextTime, performanceTime } = ctx.getOutputTimestamp();   // what's coming out now, on both clocks
+      const heard = (performanceTime + (at - contextTime) * 1000 - performance.now()) / 1000;
+      if (performanceTime > 0 && heard >= wait && heard < wait + 1) return heard;
+    } catch { /* not in this browser */ }
+    return wait + (ctx.baseLatency || 0) + (ctx.outputLatency || 0);
   }
   // Down to silence from `at` (or now), over about 7 × `time` seconds.
   function fade(v, at = 0, time = 0.008) {
@@ -702,11 +713,11 @@
       `<path d="${eyes}" fill="#5d6866" stroke="#5d6866" stroke-width="3" stroke-linejoin="round"/>` +
       `<path d="${glint}" fill="#7ff8d4" filter="url(#glow)"/></svg>`);
   }
-  /* How a banner moves with its sound. It stays as long as the sound rings (until it's 20 dB down from its
-     loudest), 2.2 s at least and 4.6 s at most, so a Valorant ace keeps its banner up while it rings. Each later
-     swell that comes back within 4 dB of the loudest makes it flare again: Valorant's aces swell one to three times
-     in their first 1.6 s. Their kills 1 to 4, like the other packs' sounds, are one hit, so the banner pops once. */
-  const shapes = new WeakMap();   // sound → { ring, swells }, in seconds
+  /* How a banner moves with its sound. It pops up as the sound starts and stays as long as the sound rings (until
+     it's 20 dB down from its loudest), 2.2 s at least and 4.6 s at most, so a Valorant ace keeps its banner up
+     while it rings. Each later hit in the sound kicks it and makes it flare, as hard as the hit: Valorant's aces hit
+     four times, at about 0, 0.2, 0.57 and 0.77 s, and some of their kills 1 to 4 hit more than once. */
+  const shapes = new WeakMap();   // sound → { ring, hits }, in seconds
   function shape(buf) {
     let s = shapes.get(buf);
     if (s) return s;
@@ -720,58 +731,123 @@
     const peak = Math.max(0, ...env);
     let end = env.length;
     while (end > 0 && env[end - 1] < peak * 0.1) end--;
-    s = { ring: end * F, swells: [] };
-    let low = Infinity, last = 0;   // the quietest it's been since the last hit, and when that hit was
-    for (let i = 1; i < end - 1 && i * F <= 3; i++) {
-      const t = i * F;
-      low = Math.min(low, env[i]);
-      // A peak back within 4 dB of the loudest, 3 dB or more over the dip before it, 0.4 s or more after the last.
-      if (env[i] >= peak * 0.63 && env[i] >= env[i - 1] && env[i] > env[i + 1] && env[i] > low * 1.41 && t - last >= 0.4) {
-        s.swells.push(t);
-        last = t;
-        low = env[i];
-      }
-    }
+    s = { ring: end * F, hits: hitsIn(buf) };
     shapes.set(buf, s);
     return s;
   }
-  // A kill's banner, fit to its sound (`buf`, or none: a plain pop). The ace comes in bigger.
+  // The hits in a sound's first 2 s: where it suddenly gets louder across its spectrum. Its spectrum is taken from
+  // 43 ms slices of it every 10 ms, and a hit is a peak in how much it rises from one slice to the next (its
+  // spectral flux) that stands out from the 0.6 s around it. How hard a hit is, 0 to 1: its rise against the
+  // sound's biggest, times how loud the sound is just after it against its loudest.
+  const FFT = 2048;
+  let fftTables = null;
+  function hitsIn(buf) {
+    const N = FFT, half = N / 2;
+    if (!fftTables) {
+      const bits = Math.log2(N), rev = new Uint16Array(N), cos = new Float64Array(half), sin = new Float64Array(half), win = new Float64Array(N);
+      for (let i = 0; i < N; i++) {
+        let r = 0;
+        for (let b = 0; b < bits; b++) r = r << 1 | (i >> b & 1);
+        rev[i] = r;
+        win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N);
+      }
+      for (let i = 0; i < half; i++) { cos[i] = Math.cos(2 * Math.PI * i / N); sin[i] = -Math.sin(2 * Math.PI * i / N); }
+      fftTables = { rev, cos, sin, win };
+    }
+    const { rev, cos, sin, win } = fftTables, hop = Math.round(buf.sampleRate * 0.01);
+    const n = Math.min(Math.floor(buf.length / hop), 201), len = Math.min(buf.length, n * hop + half), x = new Float32Array(len);
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      const c = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) x[i] += c[i] / buf.numberOfChannels;
+    }
+    const re = new Float64Array(N), im = new Float64Array(N), flux = new Float64Array(n), level = new Float64Array(n);
+    let last = new Float64Array(half), mag = new Float64Array(half);
+    for (let f = 0; f < n; f++) {
+      const from = f * hop - half;   // the slice is centred on f × 10 ms
+      for (let i = 0; i < N; i++) { const j = from + i; re[rev[i]] = j >= 0 && j < len ? x[j] * win[i] : 0; }
+      im.fill(0);
+      for (let size = 2; size <= N; size *= 2) {   // its FFT, in place
+        const h = size / 2, step = N / size;
+        for (let i = 0; i < N; i += size) for (let k = 0; k < h; k++) {
+          const a = i + k, b = a + h, wr = cos[k * step], wi = sin[k * step];
+          const tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        }
+      }
+      let rise = 0, e = 0;
+      for (let k = 1; k < half; k++) {
+        mag[k] = Math.log1p(100 * Math.sqrt(re[k] * re[k] + im[k] * im[k]));
+        if (f && mag[k] > last[k]) rise += mag[k] - last[k];
+      }
+      for (let j = f * hop; j < Math.min(len, f * hop + hop); j++) e += x[j] * x[j];
+      flux[f] = rise; level[f] = e / hop;
+      [last, mag] = [mag, last];
+    }
+    let top = 0, loud = 0;
+    for (let f = 0; f < n; f++) { top = Math.max(top, flux[f]); loud = Math.max(loud, level[f]); }
+    const hits = [];
+    for (let f = 1; f < n; f++) {
+      // The biggest rise within 50 ms, a quarter of the biggest or more, and 1.5 times the average around it.
+      let near = 0, sum = 0, count = 0, after = 0;
+      for (let g = Math.max(0, f - 30); g <= Math.min(n - 1, f + 30); g++) { sum += flux[g]; count++; if (Math.abs(g - f) <= 5) near = Math.max(near, flux[g]); }
+      if (flux[f] < near || flux[f] < 0.25 * top || flux[f] < 1.5 * sum / count) continue;
+      for (let g = f; g < Math.min(n, f + 4); g++) after = Math.max(after, level[g]);
+      hits.push({ t: f / 100, s: flux[f] / top * Math.sqrt(after / loud) });
+    }
+    return hits;
+  }
+  // Each sound's hits are worked out ahead of its first kill, one sound at a time.
+  const warm = list => list.forEach((buf, i) => setTimeout(() => shape(buf), 200 * (i + 1)));
+  // A kill's banner, fit to its sound (`buf`, or none: a plain pop). The ace comes in bigger. A hit in the first
+  // 0.12 s is the pop's own, and the faintest don't move it.
   function fitFor(look, buf, kill) {
-    const { ring, swells } = buf ? shape(buf) : { ring: 0, swells: [] };
+    const { ring, hits } = buf ? shape(buf) : { ring: 0, hits: [] };
     const time = Math.min(4.6, Math.max(2.2, ring + 0.9));
-    return { time, swells: swells.filter(t => t >= 0.35 && t <= time - 0.85), ace: kill >= MAX_KILL,
+    return { time, hits: hits.filter(h => h.t >= 0.12 && h.t <= time - 0.6 && h.s >= 0.15), ace: kill >= MAX_KILL,
       glow: (PACKS.find(p => p.id === look) || {}).glow || EGG_GLOW };
   }
-  // Its two animations: the box moves (in, settle, a kick on each swell, fade) and the picture glows (a flash, then
-  // its pack's colour, flaring on each swell). Times are in seconds.
-  function frames({ time, swells, glow, ace }) {
+  // Its two animations: the box moves (in, settle, fade), and the picture glows (a flash, then its pack's colour)
+  // and takes the kicks. On a hit, it gets up to 6% bigger and brighter in 35 ms, its glow flares, and it eases
+  // back. The picture's frames are worked out every 10 ms, so a kick can land on the flash or on the last kick.
+  // Times are in seconds.
+  function frames({ time, hits, glow, ace }) {
     const at = t => Math.min(1, Math.max(0, t / time));
     const halo = (bright, blur, alpha) => `brightness(${bright}) drop-shadow(0 0 ${blur}vh ${glow}${alpha})`;
-    const calm = halo(1, 0.6, "59");
     const box = [
       { offset: 0, opacity: 0, transform: `scale(${ace ? 1.75 : 1.5})`, easing: "cubic-bezier(.2, .8, .3, 1)" },
       { offset: at(0.13), opacity: 1, transform: "scale(.95)" },
       { offset: at(0.31), opacity: 1, transform: "scale(1)" },
+      { offset: at(time - 0.48), opacity: 1, transform: "scale(1)", easing: "ease-in" },
+      { offset: 1, opacity: 0, transform: "scale(.96)" },
     ];
-    const pic = [
-      { offset: 0, filter: halo(ace ? 3 : 2.5, ace ? 2.8 : 2.2, "ff") },
-      { offset: at(0.13), filter: halo(1.8, 1.6, "cc") },
-      { offset: at(0.31), filter: calm },
-    ];
-    for (const t of swells) {
-      box.push({ offset: at(t), transform: "scale(1)", easing: "cubic-bezier(.2, .8, .3, 1)" },
-        { offset: at(t + 0.08), transform: "scale(1.06)" }, { offset: at(t + 0.34), transform: "scale(1)" });
-      pic.push({ offset: at(t), filter: calm }, { offset: at(t + 0.06), filter: halo(1.6, 1.8, "e6") },
-        { offset: at(t + 0.4), filter: calm });
+    // The flash: brightness, glow size (vh) and glow alpha (0 to 255) at these times, in a straight line between.
+    const flash = [[0, ace ? 3 : 2.5, ace ? 2.8 : 2.2, 255], [0.13, 1.8, 1.6, 204], [0.31, 1, 0.6, 89]];
+    const flashAt = t => {
+      const j = flash.findIndex(p => p[0] > t);
+      if (j < 0) return flash[flash.length - 1];
+      const p = flash[j - 1], q = flash[j];
+      return p.map((v, m) => v + (q[m] - v) * (t - p[0]) / (q[0] - p[0]));
+    };
+    const pic = [];
+    for (let i = 0, n = Math.ceil(time * 100); i <= n; i++) {
+      const t = Math.min(time, i / 100);
+      let kick = 0;   // 0 to 1
+      for (const h of hits) {
+        const u = t - h.t;
+        if (u >= 0) kick = Math.max(kick, Math.sqrt(Math.min(1, h.s / 0.6)) * (u < 0.035 ? Math.sin(u / 0.035 * Math.PI / 2) : Math.exp((0.035 - u) / 0.09)));
+      }
+      const [, bright, blur, alpha] = flashAt(t);
+      pic.push({ offset: t / time, transform: `scale(${(1 + 0.06 * kick).toFixed(4)})`,
+        filter: halo((bright + 0.6 * kick).toFixed(3), Math.max(blur, 0.6 + 1.2 * kick).toFixed(2),
+          Math.round(Math.max(alpha, 89 + 141 * kick)).toString(16).padStart(2, "0")) });
     }
-    box.push({ offset: at(time - 0.48), opacity: 1, transform: "scale(1)", easing: "ease-in" },
-      { offset: 1, opacity: 0, transform: "scale(.96)" });
-    pic.push({ offset: 1, filter: calm });
-    return { box, pic };
+    // Frames in the middle of a stretch where nothing changes go.
+    const same = (a, b) => a.transform === b.transform && a.filter === b.filter;
+    return { box, pic: pic.filter((f, i) => i === 0 || i === pic.length - 1 || !same(f, pic[i - 1]) || !same(f, pic[i + 1])) };
   }
   let bannerGen = 0;
   function showBanner(img, delay, fit) {
-    const gen = bannerGen;
+    const gen = bannerGen, start = performance.now() + Math.max(0, delay) * 1000;
     setTimeout(() => {
       if (gen !== bannerGen || !running || !document.body) return;
       let box = document.getElementById(BANNER);
@@ -785,8 +861,10 @@
       box.replaceChildren(img);
       box.getAnimations({ subtree: true }).forEach(a => a.cancel());   // the last banner's, and this picture's from before
       const { box: moves, pic } = frames(fit), timing = { duration: fit.time * 1000 };
-      box.animate(moves, timing);
-      img.animate(pic, timing);
+      // Both from the moment the sound is heard, even if this runs a little late.
+      for (const a of [box.animate(moves, timing), img.animate(pic, timing)]) {
+        try { a.startTime = start; } catch { /* they start now */ }
+      }
     }, Math.max(0, delay * 1000));
   }
   function hideBanner() {
@@ -803,8 +881,9 @@
     const banner = look ? art(look).then(list => list[kill - 1], failed) : null;
     Promise.all([sound, banner]).then(([buf, img]) => {
       if (!running) return;
+      const fit = img && bannerFor(saved) === look ? fitFor(look, buf, kill) : null;   // before the sound: it can take a moment
       const delay = buf && saved.pack === pack ? play(buf, saved.volume) : 0;
-      if (img && bannerFor(saved) === look) showBanner(img, delay, fitFor(look, buf, kill));
+      if (fit) showBanner(img, delay, fit);
     });
   }
 
@@ -848,7 +927,14 @@
   let pendingFiles = null, fileGen = 0;   // files picked since the popup opened: { list, names, decoded }
   const names = () => pendingFiles ? pendingFiles.names : customNames;
   // The slider is the game's 14em, but may give up a little so the cell fits its column: at full size it would
-  // widen the column and push the popup's right edge out.
+  // widen the column and push the popup's right edge out. The note's error red is !important, as the game's
+  // text_blue4 is.
+  // The list's colours (--ssks-*) are read from the theme by paint(). Where the browser can style a dropdown's list
+  // (Chrome and Edge), it opens as a short list in those colours, with the closed box drawn like the game's own
+  // dropdowns: their 4px text inset and their arrow. Only the row with the focus is lit there: Chrome would also
+  // tint the one under the mouse. Elsewhere the browser's list keeps its size, and only the group headings get the
+  // colours: themes colour the options but not the headings, which came out white.
+  const CHEVRON = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9'%3E%3Cpath d='M.9 2.5 4.5 6.5 8.1 2.5' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`;
   const CSS = `
 #${CELL} { min-width: 0; }
 #${CELL} .f_row { align-items: center; }
@@ -858,7 +944,27 @@
 #${CELL} .ss_button:disabled { opacity: .5; cursor: default; }
 #${CELL} .ssks-note { margin: 0 0 var(--ss-space-md) var(--ss-space-sm); font-weight: 700; font-size: .8em; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#${CELL} .ssks-note.ssks-error { color: var(--ss-red, #d15354) !important; }`;   // the game's text_blue4 is !important too
+#${CELL} .ssks-note.ssks-error { color: var(--ss-red, #d15354) !important; }
+#${CELL} optgroup { background: var(--ssks-bg); color: var(--ssks-accent); }
+#${CELL} optgroup > option { color: var(--ssks-fg); }
+@supports (appearance: base-select) {
+  #${CELL} select, #${CELL} select::picker(select) { appearance: base-select; }
+  #${CELL} select { align-items: center; padding-inline: calc(var(--ss-space-sm) + 4px) 0; }
+  #${CELL} selectedcontent { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #${CELL} select::picker-icon { content: ""; flex: none; width: 9px; height: 9px; margin-inline: .3em 3px;
+    background: currentColor; mask: ${CHEVRON} center / contain no-repeat; }
+  #${CELL} select::picker(select) { margin-block: .2em; padding-block: .3em; max-block-size: min(18em, 45vh); font-size: .85em;
+    border: var(--ss-common-border-width) solid var(--ssks-accent); border-radius: var(--ss-space-sm);
+    background: var(--ssks-bg); color: var(--ssks-fg); box-shadow: .15em .15em .4em rgb(0 0 0 / .6);
+    scrollbar-width: thin; scrollbar-color: var(--ssks-accent) transparent; }
+  #${CELL} optgroup, #${CELL} option { font-size: inherit; }
+  #${CELL} option { padding-block: .15em; line-height: 1.25; font-weight: 400; }
+  #${CELL} option:hover { background: none; }
+  #${CELL} option:focus { background: var(--ssks-accent); color: var(--ssks-bg); outline: none; }
+  #${CELL} option::checkmark { color: var(--ssks-accent); }
+  #${CELL} option:focus::checkmark { color: inherit; }
+  #${CELL} hr { inline-size: auto; margin: .3em .5em; border: 0; border-block-start: 1px solid var(--ssks-accent); opacity: .45; }
+}`;
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -879,8 +985,13 @@
       return g;
     };
     const select = el("select", "ss_select ss_marginright_sm");
-    select.append(group("Sound packs", PACKS.filter(p => !p.valorant)), group("Valorant", PACKS.filter(p => p.valorant)),
-      new Option("Your own sounds", CUSTOM), new Option("Off", OFF));
+    // Chrome and Edge draw the closed box from this button, so a long name ends in "…" before the arrow.
+    // Other browsers leave it out.
+    const face = el("button");
+    face.type = "button";
+    face.append(el("selectedcontent"));
+    select.append(face, group("Sound packs", PACKS.filter(p => !p.valorant)), group("Valorant", PACKS.filter(p => p.valorant)),
+      el("hr"), new Option("Your own sounds", CUSTOM), new Option("Off", OFF));
     const test = el("button", "ss_button btn_blue bevel_blue btn_sm", "Test");
     test.type = "button";
     test.title = "Plays kill 1, then 2, and so on up to 5, with its banner.";
@@ -914,6 +1025,15 @@
       (document.head || document.documentElement).append(style);
     }
 
+    // Just before the list opens, so a theme switched on or off since shows in it.
+    select.addEventListener("pointerdown", paint);
+    select.addEventListener("keydown", paint);
+    // In Chrome and Edge's short list, the row the mouse moves onto takes the focus, so as in the browser's own list
+    // one row is lit, the one Enter picks, whether the mouse or the keys moved last. Not on mouseover: that also
+    // comes when the keys scroll the list under a mouse that hasn't moved.
+    select.addEventListener("mousemove", e => {
+      if (e.target instanceof HTMLOptionElement && e.target !== document.activeElement) e.target.focus({ preventScroll: true });
+    });
     select.addEventListener("change", () => {
       pending.pack = select.value;
       testKill = 0;
@@ -943,10 +1063,12 @@
       if (ui !== me || shown === me.shown) return;
       me.shown = shown;
       revert({ ...saved });
+      if (shown) paint();
     });
     me.io.observe(cell.closest("#settings") || grid);
     ui = me;
     revert({ ...saved });
+    paint();
   }
   function removeUI() {
     if (!ui) return;
@@ -956,6 +1078,22 @@
     ui = null;
     pendingFiles = null;
     fileGen++;
+  }
+  // The list takes its colours from the theme, as it colours the game's own dropdowns: an option's background and
+  // text, and the box's border for the headings and the highlight. In Chrome and Edge the page draws the closed
+  // box, not the browser, so it also takes the font the browser gives Language.
+  function paint() {
+    if (!ui) return;
+    const { select, cell } = ui, vars = ["--ssks-bg", "--ssks-fg", "--ssks-accent"];
+    const clear = c => /^transparent$|^rgba\(.*,\s*0(\.0+)?\)$|\/\s*0(\.0+)?\)$/.test(c);
+    // Without a theme colour of their own, options take the list's, which comes from these: the old ones go first.
+    vars.forEach(v => select.style.removeProperty(v));
+    const o = getComputedStyle([...select.children].find(e => e.tagName === "OPTION" && !e.selected));
+    const s = getComputedStyle(select);
+    const values = [[o.backgroundColor, s.backgroundColor].find(c => !clear(c)) || "#fff", o.color, s.borderTopColor];
+    vars.forEach((v, i) => select.style.setProperty(v, values[i]));
+    const game = [...cell.parentNode.querySelectorAll("select.ss_select")].find(e => e !== select);
+    if (game) select.style.fontFamily = getComputedStyle(game).fontFamily;
   }
   // The controls go back to `to`, and files picked since (or still loading) are dropped.
   function revert(to) {
@@ -1018,8 +1156,9 @@
         const name = PACKS.find(p => p.id === pack).name;
         showStatus(lost ? "Couldn't download " + name : "", true, `Couldn't download ${name} from GitHub. Check your connection, then try again.`);
       }
+      const fit = img ? fitFor(look, buf, kill) : null;
       const delay = buf ? play(buf, volume) : 0;
-      if (img) showBanner(img, delay, fitFor(look, buf, kill));
+      if (fit) showBanner(img, delay, fit);
     });
   }
   // Picked files wait for Confirm like the rest of the settings: until then they're only previewed.
@@ -1050,6 +1189,7 @@
     customNames = pendingFiles.names;
     pendingFiles = null;
     cache.set(CUSTOM, Promise.resolve(decoded));
+    warm(decoded);
     writeFiles(list).catch(err => warn("Couldn't keep your files for next time:", err));
   }
 
