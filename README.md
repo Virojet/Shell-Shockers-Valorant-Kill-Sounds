@@ -8,7 +8,7 @@
 
 [![Install Valorant Kill Sounds](https://img.shields.io/badge/Install_Valorant_Kill_Sounds-one_click-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Valorant-Kill-Sounds/main/Shell-Shockers-Valorant-Kill-Sounds.user.js)
 
-[![Version](https://img.shields.io/badge/version-1.1.0-0E7697?style=flat-square)](./Shell-Shockers-Valorant-Kill-Sounds.user.js)
+[![Version](https://img.shields.io/badge/version-1.2.0-0E7697?style=flat-square)](./Shell-Shockers-Valorant-Kill-Sounds.user.js)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](./LICENSE)
 
 </div>
@@ -28,7 +28,7 @@
 
 Each time you crack someone, you hear a sound and a kill banner pops up, and each kill in your streak goes a step higher: kill 1, 2, 3, 4, then 5 at the top. Kills after the 5th keep the 5th. When you die, your streak starts again from 1.
 
-- **Five sound packs** made by the script, **seven of Valorant's own**, or [your own sounds](#your-own-sounds):
+- **Five sound packs** made by the script, **fifteen of Valorant's own**, or [your own sounds](#your-own-sounds):
 
   | Pack | Sound |
   |---|---|
@@ -37,7 +37,7 @@ Each time you crack someone, you hear a sound and a kill banner pops up, and eac
   | **Synth** | A synthwave chord stab on a kick, with echoes. |
   | **Blade** | A sword swish into a ringing shing. The 4th kill cuts twice and the 5th three times. |
   | **Bubble** | A bloop that slides up into its note. The 5th is a quick run of them. |
-  | **Valorant** | **Default**, **Reaver**, **Prelude to Chaos**, **Primordium**, **Sovereign**, **Kuronami** and **Evori Dreamwings**: Valorant's own kill sounds and kill banners for each kill in the streak, ace included. |
+  | **Valorant** | **Default**, **Reaver**, **Prelude to Chaos**, **Primordium**, **Sovereign**, **Kuronami**, **Evori Dreamwings**, **Champions 2021**, **Gaia's Vengeance**, **Recon**, **Blackthorn**, **CYRAX**, **Singularity**, **Prime//2.0** and **Sentinels of Light**: Valorant's own kill sounds and kill banners for each kill in the streak, ace included. |
 
 - **The kill banner** pops up with each kill's sound, below your crosshair and just above the game's own kill message, with a mark for each kill in your streak. It always goes with the sound: with Primordium, your 1st kill plays Primordium's 1st kill sound with Primordium's 1st kill banner, and so on up to the ace. With the other packs and your own sounds, you get **the Shell Shockers banner**: a cracked egg drawn in the style of Valorant's default banner.
 - **Each banner moves with its sound.** It glows in its pack's colour and stays up as long as its sound rings. A Valorant ace keeps its banner up for up to 4.6 seconds, and it flares again on each swell of the ace.

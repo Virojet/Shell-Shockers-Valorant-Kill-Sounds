@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shell Shockers Valorant Kill Sounds
-// @version      1.1.0
-// @description  Valorant-style kill sounds and kill banners: a sound and a banner on each of your kills, a step higher for each kill in your streak up to the 5th. Five sound packs, seven of Valorant's own, or your own files.
+// @version      1.2.0
+// @description  Valorant-style kill sounds and kill banners: a sound and a banner on each of your kills, a step higher for each kill in your streak up to the 5th. Five sound packs, fifteen of Valorant's own, or your own files.
 // @namespace    https://github.com/Virojet
 // @author       Virojet
 // @license      MIT
@@ -78,7 +78,7 @@
    call: it starts the sound and the banner, then lets the game show its message as usual. Only your own kills make
    that call with type 0, so other players' kills, hits and your deaths do nothing. The game's code isn't changed.
 
-   The sounds: five packs made in your browser when the game loads, seven of Valorant's own kill sounds, downloaded
+   The sounds: five packs made in your browser when the game loads, fifteen of Valorant's own kill sounds, downloaded
    from this project on GitHub the first time you pick one and kept in this site's storage, or your own files, kept
    there too. They play through the game's sound output, so its Sound Effects volume turns them up and down with
    everything else.
@@ -97,7 +97,7 @@
   "use strict";
   if (window.ssKillSounds) return;   // already running: Tampermonkey and the Mod Menu both started it
 
-  const VERSION = "1.1.0";
+  const VERSION = "1.2.0";
   const STORE = "ssKillSounds";
   const MAX_KILL = 5;
   const PACKS = [
@@ -115,6 +115,14 @@
     { id: "sovereign", name: "Sovereign", valorant: true, glow: "#86f7ff" },
     { id: "kuronami", name: "Kuronami", valorant: true, glow: "#61abd5" },
     { id: "evori", name: "Evori Dreamwings", valorant: true, glow: "#9b7cff" },
+    { id: "champions2021", name: "Champions 2021", valorant: true, glow: "#c4b071" },
+    { id: "gaia", name: "Gaia's Vengeance", valorant: true, glow: "#49c8f4" },
+    { id: "recon", name: "Recon", valorant: true, glow: "#00fbc8" },
+    { id: "blackthorn", name: "Blackthorn", valorant: true, glow: "#e7031c" },
+    { id: "cyrax", name: "CYRAX", valorant: true, glow: "#f4f7fb" },
+    { id: "singularity", name: "Singularity", valorant: true, glow: "#f1b18c" },
+    { id: "prime2", name: "Prime//2.0", valorant: true, glow: "#9098f1" },
+    { id: "sentinels", name: "Sentinels of Light", valorant: true, glow: "#e6e1a5" },
   ];
   const VALORANT = new Set(PACKS.filter(p => p.valorant).map(p => p.id));
   const CUSTOM = "custom", OFF = "off";
@@ -496,7 +504,7 @@
      Five MP3s and five PNGs a pack, about 1 MB, in this project's valorant folder on GitHub. They come from the
      commit that added them, so the files this version uses never change under it. A pack is downloaded the first
      time it's needed, then kept in this site's Cache Storage, so it doesn't download again on the next visit. */
-  const FILES = "https://raw.githubusercontent.com/Virojet/Shell-Shockers-Valorant-Kill-Sounds/7b76c8652121d1ecf80d576139ee2959d41bde36/valorant";
+  const FILES = "https://raw.githubusercontent.com/Virojet/Shell-Shockers-Valorant-Kill-Sounds/7e7305c5fd296117c14f49ec9c1941ae3b1b84e8/valorant";
   const KEEP = "ss-kill-sounds";
   let kept = null;
   function keep() {
