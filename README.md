@@ -8,8 +8,9 @@
 
 [![Install Valorant Kill Sounds](https://img.shields.io/badge/Install_Valorant_Kill_Sounds-one_click-2ea44f?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Valorant-Kill-Sounds/main/Shell-Shockers-Valorant-Kill-Sounds.user.js)
 
-[![Version](https://img.shields.io/badge/version-1.2.1-0E7697?style=flat-square)](./Shell-Shockers-Valorant-Kill-Sounds.user.js)
+[![Version](https://img.shields.io/badge/version-1.2.2-0E7697?style=flat-square)](./Shell-Shockers-Valorant-Kill-Sounds.user.js)
 [![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](./LICENSE)
+[![Installs](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fabacus.jasoncameron.dev%2Fget%2Fvirojet-kill-sounds%2Finstalls&query=%24.value&label=installs&color=2ea44f&style=flat-square)](#privacy)
 
 </div>
 
@@ -82,9 +83,18 @@ Pick **Off** under Kill Sounds, untick **Kill Banner**, then press **Confirm**. 
 >
 > Valorant and the names of its skins are trademarks of Riot Games. The sounds and banners in the [valorant](./valorant) folder belong to Riot Games and aren't covered by this project's MIT license. The five sound packs and the Shell Shockers banner are original: the script makes them in your browser.
 
+## Privacy
+
+- **Install count:** the first time it runs, one anonymous hit goes to a public counter ([Abacus](https://abacus.jasoncameron.dev)) so the installs badge above stays current. No settings, sounds, names or IDs. It's sent once per browser; the `ssKillSounds-install-counted` key in site storage remembers it.
+- **Sounds:** a Valorant pack downloads from this project on GitHub the first time you pick it, then stays in this site's storage. Your own sound files never leave your browser.
+
 ## Changelog
 
-#### v1.2.1 — current
+#### v1.2.2 — current
+
+- **Install count:** an anonymous count of how many browsers run Kill Sounds, so the installs badge above can show it. See [Privacy](#privacy). Nothing else changed, and no Valorant files changed, so nothing downloads again.
+
+#### v1.2.1
 
 - **Banners on the beat:** a kill banner now kicks and flares on each hit in its sound, so a Valorant ace's banner beats along with the ace. It used to kick only on the ace's loudest swells, which often fell between the hits. Kills 1 to 4 that hit more than once (Recon, Singularity, CYRAX and a few others) kick on those hits too.
 - **In time with what you hear:** the banner pops up the moment you hear its sound. It used to show up a moment early, because your browser and speakers take a little time to play a sound (longer on Bluetooth).

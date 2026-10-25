@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shell Shockers Valorant Kill Sounds
-// @version      1.2.1
+// @version      1.2.2
 // @description  Valorant-style kill sounds and kill banners: a sound and a banner on each of your kills, a step higher for each kill in your streak up to the 5th. Five sound packs, fifteen of Valorant's own, or your own files.
 // @namespace    https://github.com/Virojet
 // @author       Virojet
@@ -97,7 +97,7 @@
   "use strict";
   if (window.ssKillSounds) return;   // already running: Tampermonkey and the Mod Menu both started it
 
-  const VERSION = "1.2.1";
+  const VERSION = "1.2.2";
   const STORE = "ssKillSounds";
   const MAX_KILL = 5;
   const PACKS = [
@@ -1267,4 +1267,18 @@
     description: "A Valorant-style sound and banner on each of your kills, a step higher for each kill in your streak.",
     enable: start, disable: stop, openSettings,
   });
+
+  // install-counter:begin
+  // Install counter: one anonymous hit per browser, sent once and never again (key "ssKillSounds-install-counted").
+  // Nothing is sent but the hit itself: no settings, names or IDs. Total: abacus.jasoncameron.dev/get/virojet-kill-sounds/installs
+  (() => {
+    const KEY = "ssKillSounds-install-counted";
+    try { if (localStorage.getItem(KEY)) return; } catch (e) { return; }
+    setTimeout(() => {
+      fetch("https://abacus.jasoncameron.dev/hit/virojet-kill-sounds/installs", { credentials: "omit", referrerPolicy: "no-referrer" })
+        .then(r => { if (r.ok) localStorage.setItem(KEY, "1"); })
+        .catch(() => { });
+    }, 8000);
+  })();
+  // install-counter:end
 })();
