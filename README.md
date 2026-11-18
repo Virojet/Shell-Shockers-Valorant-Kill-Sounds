@@ -90,7 +90,11 @@ Pick **Off** under Kill Sounds, untick **Kill Banner**, then press **Confirm**. 
 
 ## Changelog
 
-#### v1.2.2 — current
+#### v1.2.3 — current
+
+- **Settings layout:** Kill Sounds now always sits beside Language, above Gun Sounds and Smoke Logo. If one of those mods loaded first, Kill Sounds used to drop to the bottom of the tab and leave a gap next to Language.
+
+#### v1.2.2
 
 - **Install count:** an anonymous count of how many browsers run Kill Sounds, so the installs badge above can show it. See [Privacy](#privacy). Nothing else changed, and no Valorant files changed, so nothing downloads again.
 

@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shell Shockers Valorant Kill Sounds
-// @version      1.2.2
+// @version      1.2.3
 // @description  Valorant-style kill sounds and kill banners: a sound and a banner on each of your kills, a step higher for each kill in your streak up to the 5th. Five sound packs, fifteen of Valorant's own, or your own files.
 // @namespace    https://github.com/Virojet
 // @author       Virojet
@@ -97,7 +97,7 @@
   "use strict";
   if (window.ssKillSounds) return;   // already running: Tampermonkey and the Mod Menu both started it
 
-  const VERSION = "1.2.2";
+  const VERSION = "1.2.3";
   const STORE = "ssKillSounds";
   const MAX_KILL = 5;
   const PACKS = [
@@ -923,6 +923,7 @@
 
   /* ---- Settings ▸ the speaker tab ▸ Kill Sounds, next to Language ---- */
   const CELL = "ss-kill-sounds";
+  const WIDE = ":scope > #ss-gun-sounds, :scope > #ss-smoke-logo-cell";   // other mods' full-width cells in this tab
   let ui = null, pending = null, testKill = 0, customNames = [];
   let pendingFiles = null, fileGen = 0;   // files picked since the popup opened: { list, names, decoded }
   const names = () => pendingFiles ? pendingFiles.names : customNames;
@@ -1016,7 +1017,11 @@
     const row = (...kids) => { const r = el("div", "f_row"); r.append(...kids); return r; };
     files.append(choose, note, input);
     cell.append(el("h3", "margin-bottom-none h-short", "Kill Sounds"), row(select, test), row(range, value), files, bannerRow);
-    grid.append(cell);
+    // Kill Sounds takes one column, beside Language. Gun Sounds and Smoke Logo take the whole row, so it goes before
+    // them whichever loaded first: after them it would drop to the bottom and leave a gap beside Language.
+    const wide = grid.querySelector(WIDE);
+    if (wide) wide.before(cell);
+    else grid.append(cell);
 
     let style = document.getElementById(CELL + "-style");
     if (!style) {
